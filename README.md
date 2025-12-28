@@ -1,138 +1,112 @@
-# X-Ray: Multi-Step Decision Debugger
+# X-Ray: Observability for AI Agents & Pipelines
 
-A simple SDK and dashboard for debugging pipelines like LLM chains, multi-agent systems, etc.
+A lightweight observability SDK and dashboard designed for debugging LLM chains, multi-agent systems, and complex decision pipelines. Built on **OpenTelemetry**.
 
 ## Quick Start
 
 ```bash
-# Install everything
+# Install dependencies
 npm install
 
-# Build the SDK first
-cd packages/xray-sdk && npm run build && cd ../..
+# Build the SDK
+npm run build -w @xray/xray-sdk
 
-# Start the API server (port 3001)
+# Start the observability backend (Port 3001)
 npm run dev:api
 
-# Start the dashboard (port 3000)
+# Start the dashboard (Port 3000)
 npm run dev:dashboard
 
-# Run the demo pipeline (needs GEMINI_API_KEY in packages/demo/.env)
+# Run a Demo
+# 1. Pipeline Demo (requires COHERE_API_KEY in packages/demo/.env)
 npm run demo
+
+# 2. Multi-Agent Decision Demo
+npm run demo:multiagent
 ```
 
 ## Project Structure
 
 ```
 packages/
-├── xray-sdk/     # The SDK (single file!)
-├── api/          # Simple Express API server
-├── dashboard/    # React dashboard
-└── demo/         # Example 5-step pipeline
+├── xray-sdk/     # OpenTelemetry-based instrumentation SDK
+├── api/          # Express server for collecting/serving traces
+├── dashboard/    # React-based UI for visualizing traces
+└── demo/         # Example applications
+    ├── src/index.ts     # Competitor Selection Pipeline
+    └── src/decision.ts  # Multi-Agent Classifier System
 ```
 
 ## How to Use the SDK
 
+X-Ray uses OpenTelemetry to automatically trace LLM calls.
+
 ```typescript
 import * as xray from '@xray/sdk';
+import { CohereClient } from 'cohere-ai';
 
-// Start a session
-xray.startSession('My Pipeline', { userId: 123 });
+// 1. Initialize Instrumentation (Call this first!)
+xray.initInstrumentation('my-agent-service');
 
-// Create a step
-const step = xray.startStep('process_data', 'transform');
+// 2. Instrument your LLM client
+const cohere = xray.instrumentCohere(new CohereClient({
+  token: process.env.COHERE_API_KEY,
+}));
 
-// Set input
-xray.setInput(step, { items: data });
+// 3. Make calls as usual - they will be automatically traced!
+async function main() {
+  const response = await cohere.chat({
+    model: 'command-r7b-12-2024',
+    message: 'Hello, world!',
+  });
+  
+  // Traces will appear in the dashboard automatically.
+  // X-Ray captures prompts, responses, model params, and execution time.
+}
+```
 
-// Add observations (things you looked at)
-xray.addObservation(step, {
-  id: 'item-1',
-  type: 'candidate',
-  label: 'Product A',
-  data: { price: 29.99 },
-  result: 'pass',
-  reason: 'Meets all criteria'
-});
+### Manual Instrumentation
+You can also manually track custom steps:
 
-// Add metrics (numbers you want to track)
-xray.addMetric(step, 'items_processed', 42);
+```typescript
+// Start a custom step
+const step = xray.startStep('data_processing');
 
-// Log events
+// Add details
+xray.setInput(step, { rawData: '...' });
 xray.logInfo(step, 'Processing started');
-xray.logWarning(step, 'Rate limit approaching');
-xray.logDecision(step, 'Selected top candidate');
 
-// Set output and end the step
-xray.setOutput(step, { processed: result });
+// Finish
 xray.endStep(step);
-
-// End and export the session
-xray.endSession();
-await xray.exportSession();
 ```
 
-## API Functions
+## Demos
 
-### Session Functions
-- `startSession(name, metadata)` - Start a new session
-- `endSession(status)` - End the session ('completed' or 'failed')
-- `getSession()` - Get the current session
-- `exportSession()` - Send session to the API server
-- `printSession()` - Print session to console
-- `setApiEndpoint(url)` - Change where to send data
+### 1. Competitor Selection Pipeline (`npm run demo`)
+A 5-step linear pipeline that scouts for competitor products:
+1.  **Keyword Generation** (LLM): Generates search terms.
+2.  **Search** (Mock): Simulates an API search.
+3.  **Filtering**: deterministic filtering (price, rating).
+4.  **Relevance Check** (LLM): Evaluates if products are true competitors.
+5.  **Selection**: Scores and picks the winner.
 
-### Step Functions
-- `startStep(name, type)` - Start a new step
-- `endStep(step)` - End a step
-- `setInput(step, input)` - Set step input
-- `setOutput(step, output)` - Set step output
-- `setReasoning(step, text)` - Explain why the step did what it did
-
-### Observation Functions
-- `addObservation(step, obs)` - Record something the step looked at
-
-### Event Functions
-- `logInfo(step, message, data)` - Log info
-- `logWarning(step, message, data)` - Log warning
-- `logError(step, message, data)` - Log error
-- `logDecision(step, message, data)` - Log a decision
-
-### Metric Functions
-- `addMetric(step, name, value)` - Track a number
-
-## Demo Pipeline
-
-The demo runs a 5-step competitor selection pipeline:
-
-1. **Keyword Generation** (LLM) - Ask Gemini for search keywords
-2. **Candidate Search** (Mock) - Fetch potential competitors
-3. **Apply Filters** - Filter by price, rating, reviews
-4. **LLM Relevance** - Ask Gemini if they're real competitors
-5. **Rank & Select** - Score and pick the best one
-
-To run it:
-
-```bash
-# Set your Gemini API key
-echo "GEMINI_API_KEY=your-key-here" > packages/demo/.env
-
-# Run it
-npm run demo
-```
+### 2. Multi-Agent Decision System (`npm run demo:multiagent`)
+A router-based architecture that:
+1.  **Classifies Intent**: Decides if a user wants to send a Slack DM or book a meeting.
+2.  **Routes**: Dispatches to the specific "Agent" (SlackAgent vs CalendarAgent).
+3.  **Extracts Entities**: The specialized agent extracts fields (e.g., recipient, time).
+4.  **Summarizes**: Generates a confirmation message.
 
 ## API Endpoints
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | /api/sessions | Get all sessions |
-| GET | /api/sessions/:id | Get one session |
-| POST | /api/sessions | Save a session |
-| DELETE | /api/sessions/:id | Delete one session |
-| DELETE | /api/sessions | Delete all sessions |
+| GET | `/api/sessions` | List all sessions |
+| GET | `/api/sessions/:id` | Get details for a specific session |
+| POST | `/api/observations` | Ingest a new trace observation |
 
 ## Known Limitations
 
-- Data is stored in memory (lost on restart)
-- Single user (no auth)
-- Dashboard polls every 5 seconds
+-   Data is stored in-memory in the API server (resets on restart).
+-   Dashboard polls periodically for updates.
+-   Currently optimized for Cohere LLMs.
