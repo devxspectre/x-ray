@@ -95,6 +95,36 @@ app.delete('/api/sessions', (req, res) => {
   res.json({ message: 'All deleted' });
 });
 
+// Receive an observation from the SDK (auto-instrumented)
+app.post('/api/observations', (req, res) => {
+  const { sessionId, sessionName, step } = req.body;
+  
+  if (!sessionId || !step) {
+    res.status(400).json({ error: 'Missing sessionId or step' });
+    return;
+  }
+  
+  // Create session if it doesn't exist
+  if (!sessions[sessionId]) {
+    sessions[sessionId] = {
+      sessionId: sessionId,
+      name: sessionName || 'Auto-instrumented Session',
+      startedAt: new Date().toISOString(),
+      endedAt: null,
+      status: 'running',
+      metadata: {},
+      steps: []
+    };
+    console.log(`Created new session: ${sessionName || sessionId}`);
+  }
+  
+  // Add the step/observation to the session
+  sessions[sessionId].steps.push(step);
+  
+  console.log(`Added observation to session ${sessionId}: ${step.name}`);
+  res.status(201).json({ message: 'Observation saved', sessionId, stepId: step.stepId });
+});
+
 // Start the server
 app.listen(PORT, () => {
   console.log(`X-Ray API running on http://localhost:${PORT}`);

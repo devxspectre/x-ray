@@ -286,3 +286,241 @@ export function logDecision(step: Step, message: string, data: any = null): void
 export function addMetric(step: Step, name: string, value: number): void {
   step.metrics[name] = value;
 }
+
+// ==================== OTEL INTEGRATION ====================
+
+import * as otel from '@opentelemetry/api';
+import { NodeSDK } from '@opentelemetry/sdk-node';
+import { ReadableSpan, SpanProcessor } from '@opentelemetry/sdk-trace-base';
+import { SemanticResourceAttributes } from '@opentelemetry/semantic-conventions';
+
+// Export instrumentation helpers
+export * from './instrumentation/cohere.js';
+
+// Parsed decision structure
+interface ParsedDecision {
+  agent: string | null;
+  confidence: number | null;
+  reasoning: string | null;
+  recipient: string | null;
+  message: string | null;
+  title: string | null;
+  attendees: string[] | null;
+  datetime: string | null;
+  urgency: string | null;
+  yesNo: boolean | null;
+  rawFields: Record<string, string>;
+}
+
+// Parse LLM response text for decision patterns
+// Parse LLM response text for decision patterns
+function parseDecisionFromResponse(response: string | undefined): ParsedDecision {
+  const result: ParsedDecision = {
+    agent: null,
+    confidence: null,
+    reasoning: null,
+    recipient: null,
+    message: null,
+    title: null,
+    attendees: null,
+    datetime: null,
+    urgency: null,
+    yesNo: null,
+    rawFields: {}
+  };
+  
+  if (!response) return result;
+  
+  // Common keys to look for
+  const keys: { key: keyof ParsedDecision; pattern: string; transform?: (val: string) => any }[] = [
+    { key: 'agent', pattern: 'AGENT' },
+    { key: 'confidence', pattern: 'CONFIDENCE', transform: (v) => parseFloat(v) },
+    { key: 'reasoning', pattern: '(?:REASON|REASONING)' },
+    { key: 'recipient', pattern: 'RECIPIENT' },
+    { key: 'message', pattern: 'MESSAGE' },
+    { key: 'title', pattern: 'TITLE' },
+    { key: 'datetime', pattern: 'DATETIME' },
+    { key: 'urgency', pattern: 'URGENCY' },
+    { key: 'attendees', pattern: 'ATTENDEES' },
+  ];
+  
+  // Robust parsing: capture content after KEY: until next KEY: or end of string
+  // Regex explanation:
+  // KEY:\s*         -> Match Key and colon and whitespace
+  // ([\s\S]+?)      -> Capture everything (including newlines) non-greedily
+  // (?=\n[A-Z_]+:|$) -> Until we see a newline followed by UPPERCASE_KEY: OR end of string
+  
+  for (const { key, pattern, transform } of keys) {
+    const regex = new RegExp(`${pattern}:\\s*([\\s\\S]+?)(?=\\n[A-Z_]+:|$)`, 'i');
+    const match = response.match(regex);
+    
+    if (match) {
+      const rawValue = match[1].trim();
+      
+      if (key === 'attendees') {
+        const list = rawValue.split(',').map(a => a.trim());
+        result.attendees = list;
+        result.rawFields['attendees'] = rawValue;
+      } else {
+        const value = transform ? transform(rawValue) : rawValue;
+        (result as any)[key] = value;
+        result.rawFields[key] = rawValue;
+      }
+    }
+  }
+  
+  // Check for YES/NO responses (fallback if not structured)
+  if (!result.rawFields['decision']) {
+    const lines = response.split('\n').filter(l => l.trim());
+    if (lines.length > 0) {
+      const firstLine = lines[0].toUpperCase();
+      if (firstLine.includes('YES')) {
+        result.yesNo = true;
+        result.rawFields['decision'] = 'YES';
+        // Try to get reason from second line if reasoning wasn't parsed
+        if (lines.length > 1 && !result.reasoning) {
+          result.reasoning = lines.slice(1).join(' ').trim();
+        }
+      } else if (firstLine.includes('NO')) {
+        result.yesNo = false;
+        result.rawFields['decision'] = 'NO';
+        if (lines.length > 1 && !result.reasoning) {
+          result.reasoning = lines.slice(1).join(' ').trim();
+        }
+      }
+    }
+  }
+  
+  return result;
+}
+
+class XRaySpanProcessor implements SpanProcessor {
+// ... existing methods ...
+  forceFlush(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  onStart(span: otel.Span): void {
+  }
+
+  onEnd(span: ReadableSpan): void {
+    if (!currentSession) return;
+    const step = startStep(span.name, 'auto_instrumented');
+    step.startedAt = new Date(span.startTime[0] * 1000 + span.startTime[1] / 1e6).toISOString();
+    step.endedAt = new Date(span.endTime[0] * 1000 + span.endTime[1] / 1e6).toISOString();
+    step.durationMs = span.duration[0] * 1000 + span.duration[1] / 1e6;
+    const attributes = span.attributes;
+    
+    // Extract LLM-specific information for decision visibility
+    const prompt = attributes['gen_ai.request.message'] as string | undefined;
+    const response = attributes['gen_ai.response.text'] as string | undefined;
+    const model = attributes['gen_ai.request.model'] as string | undefined;
+    
+    // Structure the input with the prompt
+    setInput(step, {
+      prompt: prompt || null,
+      model: model || null,
+      rawAttributes: attributes
+    });
+    
+    // Parse the response for decision patterns
+    const parsedDecision = parseDecisionFromResponse(response);
+    
+    // Structure the output with parsed decision
+    setOutput(step, {
+      response: response || null,
+      parsedDecision: parsedDecision,
+    });
+    
+    // Set reasoning if we found decision patterns
+    if (parsedDecision.reasoning) {
+      setReasoning(step, parsedDecision.reasoning);
+    } else if (parsedDecision.agent || parsedDecision.confidence) {
+      // Construct reasoning from parsed fields
+      const parts = [];
+      if (parsedDecision.agent) parts.push(`Selected agent: ${parsedDecision.agent}`);
+      if (parsedDecision.confidence) parts.push(`Confidence: ${(parsedDecision.confidence * 100).toFixed(0)}%`);
+      if (parts.length > 0) {
+        setReasoning(step, parts.join(' | '));
+      }
+    }
+    
+    // Add observation with full span details
+    addObservation(step, {
+      id: `span_${span.spanContext().spanId}`,
+      type: 'llm_decision',
+      label: 'LLM Decision',
+      data: {
+        traceId: span.spanContext().traceId,
+        spanId: span.spanContext().spanId,
+        parentId: (span as any).parentSpanId,
+        prompt: prompt,
+        response: response,
+        parsedDecision: parsedDecision,
+        status: span.status
+      }
+    });
+
+    if (model) {
+      addEvent(step, 'info', `Model used: ${model}`);
+    }
+    
+    if (parsedDecision.agent) {
+      addEvent(step, 'decision', `Agent selected: ${parsedDecision.agent}`, {
+        confidence: parsedDecision.confidence,
+        reason: parsedDecision.reasoning
+      });
+    }
+    
+    endStep(step);
+    
+    // Auto-export the observation to the API
+    this.exportObservation(step);
+  }
+  
+  // Send observation to API asynchronously
+  private exportObservation(step: Step): void {
+    const observationEndpoint = apiEndpoint.replace('/sessions', '/observations');
+    
+    fetch(observationEndpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sessionId: step.sessionId,
+        sessionName: currentSession?.name || 'Unknown Session',
+        step: step
+      })
+    })
+    .then(response => {
+      if (response.ok) {
+        console.log(`[X-Ray] Observation exported: ${step.name}`);
+      } else {
+        console.log(`[X-Ray] Failed to export observation: ${response.status}`);
+      }
+    })
+    .catch(error => {
+      console.log(`[X-Ray] Observation export error: ${error}`);
+    });
+  }
+
+  shutdown(): Promise<void> {
+    return Promise.resolve();
+  }
+}
+
+let otelSdk: NodeSDK | null = null;
+
+export function initInstrumentation(serviceName: string) {
+  // Use env var to set service name if Resource class is tricky to import
+  process.env.OTEL_SERVICE_NAME = serviceName;
+
+  // Auto-create a session for this service
+  startSession(serviceName, { autoCreated: true });
+
+  otelSdk = new NodeSDK({
+    spanProcessor: new XRaySpanProcessor(),
+  });
+
+  otelSdk.start();
+  console.log('[X-Ray] OpenTelemetry instrumentation initialized');
+}

@@ -7,7 +7,10 @@ const ICONS: Record<string, string> = {
   search: '🔍',
   filter: '⚡',
   rank: '🏆',
-  custom: '⚙️'
+  custom: '⚙️',
+  auto_instrumented: '🔌',
+  agent: '🕴️',
+  trace_span: '🕸️'
 }
 
 interface Props {

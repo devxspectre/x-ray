@@ -327,6 +327,394 @@ a:hover {
   border-left: 2px solid var(--border-color);
 }
 
+/* ==================== TELEMETRY OBSERVATION STYLES ==================== */
+
+/* Step Title Row */
+.step-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.step-icon-large {
+  font-size: 1.75rem;
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--accent-purple), var(--accent-blue));
+  border-radius: 12px;
+}
+
+.step-title-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.step-name-large {
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.step-duration-badge {
+  padding: 6px 12px;
+  background: var(--bg-tertiary);
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--accent-cyan);
+}
+
+/* Telemetry Card */
+.telemetry-card {
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.telemetry-content {
+  padding: 24px;
+}
+
+/* Reasoning Banner */
+.reasoning-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  background: linear-gradient(135deg, rgba(163, 113, 247, 0.15), rgba(88, 166, 255, 0.1));
+  border: 1px solid rgba(163, 113, 247, 0.3);
+  border-radius: 12px;
+  margin-bottom: 24px;
+}
+
+.reasoning-icon {
+  font-size: 1.25rem;
+  flex-shrink: 0;
+}
+
+.reasoning-text {
+  font-style: italic;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+/* Observations Container */
+.observations-container {
+  margin-top: 8px;
+}
+
+.observations-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+}
+
+.observations-icon {
+  font-size: 1.1rem;
+}
+
+.observations-count {
+  padding: 2px 8px;
+  background: var(--accent-blue);
+  border-radius: 10px;
+  font-size: 0.75rem;
+  color: white;
+  font-weight: 600;
+}
+
+.observations-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Observation Card */
+.observation-card {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  overflow: hidden;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.observation-card:hover {
+  border-color: var(--accent-purple);
+  box-shadow: 0 0 0 1px rgba(163, 113, 247, 0.2);
+}
+
+.observation-card-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.observation-card-icon {
+  font-size: 1.5rem;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-secondary);
+  border-radius: 10px;
+}
+
+.observation-card-title {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.observation-card-label {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.observation-card-type {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.observation-card-status {
+  padding: 4px 12px;
+  border-radius: 16px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: white;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.observation-card-chevron {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  transition: transform 0.2s;
+}
+
+.observation-card-chevron.open {
+  transform: rotate(90deg);
+}
+
+.observation-card-content {
+  padding: 0 16px 16px;
+  border-top: 1px solid var(--border-color);
+  margin-top: -1px;
+}
+
+/* Telemetry IDs */
+.telemetry-ids {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 16px;
+}
+
+.telemetry-id {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.telemetry-id-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.telemetry-id-value {
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
+  font-size: 0.8rem;
+  color: var(--accent-cyan);
+  background: var(--bg-secondary);
+  padding: 4px 8px;
+  border-radius: 6px;
+  word-break: break-all;
+}
+
+/* Decision Section */
+.decision-section {
+  margin-bottom: 20px;
+}
+
+.section-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.decision-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+}
+
+.decision-field {
+  padding: 12px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  border-left: 3px solid var(--accent-purple);
+}
+
+.decision-field-key {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.decision-field-value {
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  word-break: break-word;
+}
+
+/* Telemetry Sections */
+.telemetry-section {
+  margin-bottom: 20px;
+}
+
+.telemetry-code-block {
+  padding: 16px;
+  background: var(--bg-primary);
+  border-radius: 8px;
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 250px;
+  overflow: auto;
+  color: var(--text-secondary);
+}
+
+.telemetry-reason {
+  padding: 12px 16px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  font-style: italic;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  border-left: 3px solid var(--accent-yellow);
+}
+
+/* Telemetry Score */
+.telemetry-score {
+  position: relative;
+  height: 28px;
+  background: var(--bg-secondary);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.score-bar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-green), var(--accent-cyan));
+  border-radius: 14px;
+  transition: width 0.5s ease-out;
+}
+
+.score-value {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+}
+
+/* Raw Data Toggle */
+.telemetry-raw {
+  margin-top: 16px;
+}
+
+.telemetry-raw summary {
+  cursor: pointer;
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  border-radius: 6px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  user-select: none;
+  transition: background 0.2s;
+}
+
+.telemetry-raw summary:hover {
+  background: var(--border-color);
+}
+
+.telemetry-raw[open] summary {
+  border-radius: 6px 6px 0 0;
+  margin-bottom: 0;
+}
+
+.telemetry-raw > .json-viewer {
+  border-radius: 0 0 6px 6px;
+  margin-top: 0;
+}
+
+/* Children List */
+.children-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-left: 16px;
+  padding-left: 16px;
+  border-left: 2px solid var(--accent-purple);
+}
+
+/* No Observations State */
+.no-observations {
+  text-align: center;
+  padding: 48px 24px;
+  color: var(--text-secondary);
+}
+
+.no-observations-icon {
+  font-size: 3rem;
+  margin-bottom: 16px;
+  opacity: 0.5;
+}
+
+.no-observations h4 {
+  font-size: 1.1rem;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.no-observations p {
+  font-size: 0.9rem;
+}
+
 /* JSON Viewer */
 .json-viewer {
   background: var(--bg-primary);

@@ -3,9 +3,12 @@ import { CohereClient } from "cohere-ai";
 import * as xray from "@xray/sdk";
 
 // Setup Cohere
-const cohere = new CohereClient({
+// Need to initialize XRay instrumentation first
+xray.initInstrumentation('decision-agent-demo');
+
+const cohere = xray.instrumentCohere(new CohereClient({
   token: process.env.COHERE_API_KEY ?? ''
-});
+}));
 
 // Agent definitions
 const agents = [
@@ -27,7 +30,6 @@ const agents = [
 interface ClassificationResult {
   agentId: string;
   confidence: number;
-  reasoning: string;
 }
 
 interface AgentResult {
@@ -52,43 +54,26 @@ async function main() {
   console.log('\n🤖 Multi-Agent Decision System\n');
   console.log(`User Request: "${userPrompt}"\n`);
   
-  const session = xray.startSession('Decision Agent', {
-    userPrompt,
-    availableAgents: agents.map(a => a.id)
-  });
-  
   try {
-    // Step 1: Classify the user intent
-    console.log('📊 Step 1: Classifying user intent...');
+    // Classify the user intent
     const classification = await classifyIntent(userPrompt);
     
-    // Step 2: Route to appropriate agent
-    console.log(`\n🔄 Step 2: Routing to ${classification.agentId} agent...`);
+    // Route to appropriate agent
     const result = await routeToAgent(classification, userPrompt);
     
-    // Step 3: Summarize the action
-    console.log('\n📝 Step 3: Generating summary...');
+    // Summarize the action
     await summarizeAction(userPrompt, classification, result);
     
     console.log('\n' + '='.repeat(50));
     console.log('✅ Task completed successfully');
     console.log('='.repeat(50));
-    
-    xray.endSession('completed');
   } catch (error) {
     console.error('❌ Decision flow failed:', error);
-    xray.endSession('failed');
   }
-  
-  xray.printSession();
-  await xray.exportSession();
 }
 
-// Step 1: Classify the user's intent
+// Classify the user's intent
 async function classifyIntent(prompt: string): Promise<ClassificationResult> {
-  const step = xray.startStep('classify_intent', 'llm');
-  xray.setInput(step, { prompt, agents: agents.map(a => a.id) });
-  
   let classification: ClassificationResult;
   
   try {
@@ -100,10 +85,9 @@ Available agents:
 
 User request: "${prompt}"
 
-Respond with EXACTLY this format:
+RESPOND WITH EXACTLY this format:
 AGENT: [slack_dm or calendar]
-CONFIDENCE: [0.0-1.0]
-REASON: [one sentence explanation]`;
+CONFIDENCE: [0.0-1.0]`;
 
     const result = await cohere.chat({
       model: 'command-r7b-12-2024',
@@ -115,19 +99,14 @@ REASON: [one sentence explanation]`;
     // Parse the response
     const agentMatch = text.match(/AGENT:\s*(slack_dm|calendar)/i);
     const confidenceMatch = text.match(/CONFIDENCE:\s*([\d.]+)/i);
-    const reasonMatch = text.match(/REASON:\s*(.+?)(?:\n|$)/i);
     
     const agentId = agentMatch ? agentMatch[1].toLowerCase() : 'slack_dm';
     const confidence = confidenceMatch ? parseFloat(confidenceMatch[1]) : 0.7;
-    const reasoning = reasonMatch ? reasonMatch[1].trim() : 'Classified based on keywords';
     
-    classification = { agentId, confidence, reasoning };
-    
-    xray.logInfo(step, `Classified as ${agentId} with ${(confidence * 100).toFixed(0)}% confidence`);
+    classification = { agentId, confidence };
     
   } catch (error) {
     console.error('⚠️ LLM classification failed, using keyword fallback');
-    xray.logWarning(step, 'LLM failed, using heuristic classification');
     
     // Fallback to keyword matching
     const promptLower = prompt.toLowerCase();
@@ -143,47 +122,16 @@ REASON: [one sentence explanation]`;
     
     const agentId = calendarScore > slackScore ? 'calendar' : 'slack_dm';
     const confidence = 0.6;
-    const reasoning = `Matched ${Math.max(slackScore, calendarScore)} keywords for ${agentId}`;
     
-    classification = { agentId, confidence, reasoning };
+    classification = { agentId, confidence };
   }
-  
-  // Record classification observation
-  xray.addObservation(step, {
-    id: 'intent_classification',
-    type: 'classification',
-    label: `Intent: ${classification.agentId}`,
-    data: classification,
-    result: classification.confidence > 0.7 ? 'high_confidence' : 'low_confidence',
-    reason: classification.reasoning,
-    score: classification.confidence
-  });
-  
-  // Record which agents were considered
-  for (const agent of agents) {
-    xray.addObservation(step, {
-      id: `agent_${agent.id}`,
-      type: 'agent_candidate',
-      label: agent.name,
-      data: { focus: agent.focus },
-      result: agent.id === classification.agentId ? 'selected' : 'not_selected',
-      reason: agent.id === classification.agentId ? 'Best match for intent' : 'Did not match intent'
-    });
-  }
-  
-  xray.addMetric(step, 'confidence', classification.confidence);
-  xray.setOutput(step, classification);
-  xray.setReasoning(step, classification.reasoning);
-  xray.logDecision(step, `Selected ${classification.agentId} agent`, { confidence: classification.confidence });
-  xray.endStep(step);
   
   console.log(`   → Selected: ${classification.agentId} (${(classification.confidence * 100).toFixed(0)}% confident)`);
-  console.log(`   → Reason: ${classification.reasoning}`);
   
   return classification;
 }
 
-// Step 2: Route to the appropriate agent
+// Route to the appropriate agent
 async function routeToAgent(classification: ClassificationResult, prompt: string): Promise<AgentResult> {
   if (classification.agentId === 'slack_dm') {
     return await runSlackAgent(prompt);
@@ -194,9 +142,6 @@ async function routeToAgent(classification: ClassificationResult, prompt: string
 
 // Slack DM Agent
 async function runSlackAgent(prompt: string): Promise<AgentResult> {
-  const step = xray.startStep('slack_dm_agent', 'agent');
-  xray.setInput(step, { prompt });
-  
   let result: AgentResult;
   
   try {
@@ -230,11 +175,8 @@ URGENCY: [low, medium, or high]`;
       details: { recipient, message, urgency }
     };
     
-    xray.logInfo(step, `Prepared DM to ${recipient}`, { urgency });
-    
   } catch (error) {
     console.error('⚠️ Slack agent LLM failed');
-    xray.logWarning(step, 'LLM extraction failed, using defaults');
     
     result = {
       success: true,
@@ -247,21 +189,6 @@ URGENCY: [low, medium, or high]`;
     };
   }
   
-  // Record what the agent did
-  xray.addObservation(step, {
-    id: 'slack_action',
-    type: 'action',
-    label: `DM to ${result.details.recipient}`,
-    data: result.details,
-    result: 'prepared',
-    reason: `Message prepared with ${result.details.urgency} urgency`
-  });
-  
-  xray.addMetric(step, 'message_length', result.details.message.length);
-  xray.setOutput(step, result);
-  xray.setReasoning(step, `Prepared Slack DM to ${result.details.recipient}`);
-  xray.endStep(step);
-  
   console.log(`   → Recipient: ${result.details.recipient}`);
   console.log(`   → Message: "${result.details.message}"`);
   console.log(`   → Urgency: ${result.details.urgency}`);
@@ -271,9 +198,6 @@ URGENCY: [low, medium, or high]`;
 
 // Calendar Agent
 async function runCalendarAgent(prompt: string): Promise<AgentResult> {
-  const step = xray.startStep('calendar_agent', 'agent');
-  xray.setInput(step, { prompt });
-  
   let result: AgentResult;
   
   try {
@@ -310,11 +234,8 @@ DURATION: [duration in minutes]`;
       details: { title, attendees, datetime, duration }
     };
     
-    xray.logInfo(step, `Prepared event: ${title}`, { attendeeCount: attendees.length });
-    
   } catch (error) {
     console.error('⚠️ Calendar agent LLM failed');
-    xray.logWarning(step, 'LLM extraction failed, using defaults');
     
     result = {
       success: true,
@@ -328,22 +249,6 @@ DURATION: [duration in minutes]`;
     };
   }
   
-  // Record what the agent did
-  xray.addObservation(step, {
-    id: 'calendar_action',
-    type: 'action',
-    label: result.details.title,
-    data: result.details,
-    result: 'prepared',
-    reason: `Event for ${result.details.attendees.length} attendee(s), ${result.details.duration} min`
-  });
-  
-  xray.addMetric(step, 'attendee_count', result.details.attendees.length);
-  xray.addMetric(step, 'duration_minutes', result.details.duration);
-  xray.setOutput(step, result);
-  xray.setReasoning(step, `Prepared calendar event: ${result.details.title}`);
-  xray.endStep(step);
-  
   console.log(`   → Title: ${result.details.title}`);
   console.log(`   → Attendees: ${result.details.attendees.join(', ')}`);
   console.log(`   → Date/Time: ${result.details.datetime}`);
@@ -352,15 +257,12 @@ DURATION: [duration in minutes]`;
   return result;
 }
 
-// Step 3: Summarize the action taken
+// Summarize the action taken
 async function summarizeAction(
   prompt: string,
   classification: ClassificationResult,
   result: AgentResult
 ): Promise<void> {
-  const step = xray.startStep('summarize', 'llm');
-  xray.setInput(step, { prompt, classification, result });
-  
   let summary: string;
   
   try {
@@ -381,7 +283,6 @@ Provide a brief, friendly confirmation message.`;
     summary = response.text || 'Action completed successfully.';
     
   } catch (error) {
-    xray.logWarning(step, 'Summary generation failed');
     
     if (classification.agentId === 'slack_dm') {
       summary = `✉️ Slack DM prepared for ${result.details.recipient}`;
@@ -389,18 +290,6 @@ Provide a brief, friendly confirmation message.`;
       summary = `📅 Calendar event "${result.details.title}" ready to create`;
     }
   }
-  
-  xray.addObservation(step, {
-    id: 'summary',
-    type: 'output',
-    label: 'Task Summary',
-    data: { summary },
-    result: 'generated'
-  });
-  
-  xray.setOutput(step, { summary });
-  xray.setReasoning(step, 'Generated user-friendly summary of completed action');
-  xray.endStep(step);
   
   console.log(`\n   Summary: ${summary}`);
 }
